@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remind · Test Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --ink: #141414; --muted: #8a8780; --line: #e7e4dd;
+    --yes: #12a150; --no: #e5484d; --wait: #f5a524; --blue: #3b6cff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'Geist', system-ui, sans-serif;
+         -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  .mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 36px; }
+  .brand { display: flex; align-items: baseline; gap: 14px; }
+  .brand h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; }
+  .brand span { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .band { display: flex; align-items: center; gap: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+          background: var(--card); border: 1px solid var(--line); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .chip.connected .dot { background: var(--yes); box-shadow: 0 0 0 4px #12a15022; }
+  .chip.looking .dot { background: var(--blue); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  button { font: inherit; font-size: 14px; font-weight: 500; border-radius: 10px; padding: 10px 16px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--card); color: var(--ink); transition: transform .08s, background .15s; }
+  button:hover { background: #fbfaf8; } button:active { transform: scale(.98); }
+  button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button.primary:hover { background: #2a2a2a; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px; }
+  .card h2 { font-size: 13px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .card h3 { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; margin: 6px 0 18px; }
+  ol { padding-left: 18px; color: #4a4843; font-size: 14px; line-height: 1.75; margin-bottom: 22px; }
+  .answer { border-radius: 14px; background: var(--bg); padding: 18px 20px; margin-bottom: 18px; min-height: 92px;
+            display: flex; flex-direction: column; justify-content: center; gap: 6px; transition: background .3s; }
+  .answer .big { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; }
+  .answer .small { font-size: 13px; color: #55524c; }
+  .answer.yes { background: #12a15014; } .answer.yes .big { color: var(--yes); }
+  .answer.no { background: #e5484d14; } .answer.no .big { color: var(--no); }
+  .answer.listening { background: #3b6cff12; } .answer.listening .big { color: var(--blue); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .live { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr 180px; gap: 20px; }
+  .meter label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .bar { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 999px; transition: width .15s; }
+  .light { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
+  .led { width: 22px; height: 22px; border-radius: 50%; background: #3b6cff; box-shadow: 0 0 14px #3b6cff88; }
+  .led.off { background: #d9d6cf; box-shadow: none; }
+  .led.blink { animation: pulse .5s infinite; }
+  .log { margin-top: 20px; }
+  .log-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .entries { display: flex; flex-direction: column; }
+  .entry { display: grid; grid-template-columns: 76px 110px 70px 1fr; gap: 12px; align-items: center;
+           padding: 12px 4px; border-top: 1px solid var(--line); font-size: 13px; animation: in .3s ease-out; }
+  .entry.faint { color: var(--muted); }
+  @keyframes in { from { opacity: 0; transform: translateY(-4px); } }
+  .tag { display: inline-block; padding: 3px 9px; border-radius: 6px; font-size: 12px; font-weight: 500; background: var(--bg); }
+  .tag.pills, .tag.locked { background: #12a1501a; color: var(--yes); }
+  .tag.unlocked { background: #e5484d1a; color: var(--no); }
+  .tag.ignored, .tag.key-back { color: var(--muted); }
+  .empty { color: var(--muted); font-size: 13px; padding: 18px 4px; border-top: 1px solid var(--line); }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff;
+           padding: 10px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 760px) { .grid, .live { grid-template-columns: 1fr; } .entry { grid-template-columns: 64px 96px 1fr; } .entry .ang { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><h1>Remind</h1><span>test console · band 9</span></div>
+    <div class="band">
+      <div class="chip" id="chip"><span class="dot"></span><span id="linkText">Not connected</span></div>
+      <button class="primary" id="connectBtn">Connect band</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card" data-test="pills">
+      <h2>Test 1</h2><h3>Taking pills</h3>
+      <ol>
+        <li>Bottle in your left hand, band on your right.</li>
+        <li>Shake it, twist the cap open, take one, close it.</li>
+        <li>Wait 5 seconds, then press <b>Ask</b> (or double-tap) and say<br><i>“Did I take my pills today?”</i></li>
+      </ol>
+      <div class="answer" id="ans-pills"><div class="big">—</div><div class="small">No answer yet</div></div>
+      <div class="row"><button class="primary ask">Ask</button><button class="reset">Reset</button></div>
+    </section>
+
+    <section class="card" data-test="lock">
+      <h2>Test 2</h2><h3>Locking the door</h3>
+      <ol>
+        <li>Key ring in your right hand, keys hanging so they jingle.</li>
+        <li>Turn the key to lock, turn it back, pull it out.</li>
+        <li>Wait 5 seconds, then press <b>Ask</b> (or double-tap) and say<br><i>“Did I lock the door?”</i></li>
+      </ol>
+      <div class="answer" id="ans-lock"><div class="big">—</div><div class="small">No answer yet</div></div>
+      <div class="row"><button class="primary ask">Ask</button><button class="reset">Reset</button></div>
+    </section>
+  </div>
+
+  <section class="card live">
+    <div class="meter"><label><span>Wrist turn</span><span class="mono" id="turnVal">0°/s</span></label><div class="bar"><i id="turnBar"></i></div></div>
+    <div class="meter"><label><span>Sound</span><span class="mono" id="lvlVal">— dB</span></label><div class="bar"><i id="lvlBar"></i></div></div>
+    <div class="light"><div class="led off" id="led"></div><span id="ledText">Band light</span></div>
+  </section>
+
+  <section class="card log">
+    <div class="log-head"><h2>What the band noticed</h2><span class="mono" style="font-size:12px;color:var(--muted)" id="count">0 events</span></div>
+    <div class="entries" id="entries"><div class="empty">Nothing yet. Connect the band and do something.</div></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let link = "idle", listeningFor = "pills", count = 0;
+
+function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2600); }
+async function cmd(c) { try { await fetch("/" + c, { method: "POST" }); } catch { toast("Server not reachable"); } }
+
+function setLink(state) {
+  link = state;
+  const chip = $("#chip"); chip.className = "chip " + state;
+  $("#linkText").textContent = { idle: "Not connected", looking: "Double-tap the band…", connected: "Band 9 connected" }[state] || state;
+  $("#connectBtn").textContent = state === "idle" ? "Connect band" : "Disconnect";
+  $("#led").className = "led" + (state === "connected" ? "" : " off");
+  $("#ledText").textContent = state === "connected" ? "Mic on (blue)" : "Band light";
+  document.querySelectorAll(".ask").forEach((b) => (b.disabled = state !== "connected"));
+}
+
+function setAnswer(test, cls, big, small) {
+  const el = $("#ans-" + test);
+  el.className = "answer " + cls;
+  el.querySelector(".big").textContent = big;
+  el.querySelector(".small").textContent = small;
+}
+
+function addEntry(e) {
+  const list = $("#entries");
+  if (list.querySelector(".empty")) list.innerHTML = "";
+  const row = document.createElement("div");
+  const faint = ["ignored", "key-back"].includes(e.label);
+  row.className = "entry" + (faint ? " faint" : "");
+  const t = new Date(e.time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  const names = { pills: "Took pills", locked: "Locked door", unlocked: "Unlocked door", ignored: "Ignored", "key-back": "Key back" };
+  [["mono", t], ["", ""], ["mono ang", (e.angle >= 0 ? "+" : "") + Math.round(e.angle) + "°"], ["", e.heard]].forEach(([c, v], i) => {
+    const d = document.createElement("div"); if (c) d.className = c;
+    if (i === 1) { const s = document.createElement("span"); s.className = "tag " + e.label; s.textContent = names[e.label] || e.label; d.appendChild(s); }
+    else d.textContent = v;                        // text from the band/model: never innerHTML
+    row.appendChild(d);
+  });
+  list.prepend(row);
+  count++; $("#count").textContent = count + (count === 1 ? " event" : " events");
+}
+
+function resetUI() {
+  $("#entries").innerHTML = '<div class="empty">Nothing yet. Connect the band and do something.</div>';
+  count = 0; $("#count").textContent = "0 events";
+  setAnswer("pills", "", "—", "No answer yet"); setAnswer("lock", "", "—", "No answer yet");
+}
+
+const es = new EventSource("/events");
+es.onmessage = (m) => {
+  const e = JSON.parse(m.data);
+  if (e.kind === "snapshot") { setLink(e.state.link); resetUI(); (e.log || []).forEach(addEntry); }
+  else if (e.kind === "status") setLink(e.link);
+  else if (e.kind === "log") addEntry(e.entry);
+  else if (e.kind === "reset") resetUI();
+  else if (e.kind === "listening") setAnswer(listeningFor, "listening", "Listening…", "Ask your question now");
+  else if (e.kind === "answer") {
+    if (e.verdict === "none") { setAnswer(listeningFor, "", "—", "Did not hear a question. Double-tap and speak closer."); return; }
+    const q = (e.question || "").toLowerCase();
+    const test = /lock|door|key/.test(q) ? "lock" : /pill|med|vitamin|tablet/.test(q) ? "pills" : listeningFor;
+    const big = { yes: "Yes", no: "No", unsure: "Not sure" }[e.verdict];
+    setAnswer(test, e.verdict === "unsure" ? "" : e.verdict, big, e.reply);
+    if (test !== listeningFor) setAnswer(listeningFor, "", "—", "Heard: “" + e.question + "”");
+  }
+  else if (e.kind === "light") {
+    const led = $("#led"); led.className = "led blink"; led.style.background = e.colour; led.style.boxShadow = "0 0 16px " + e.colour;
+    $("#ledText").textContent = "Answer light";
+    setTimeout(() => { led.style.background = ""; led.style.boxShadow = ""; setLink(link); }, 5000);
+  }
+  else if (e.kind === "meter") {
+    if (link !== "connected") setLink("connected");   // live data means the band is connected
+    $("#turnBar").style.width = Math.min(100, e.turn / 3) + "%"; $("#turnVal").textContent = Math.round(e.turn) + "°/s";
+    const pct = Math.max(0, Math.min(100, (e.level + 70) * 1.6)); $("#lvlBar").style.width = pct + "%"; $("#lvlVal").textContent = Math.round(e.level) + " dB";
+  }
+  else if (e.kind === "error") toast(e.text.trim());
+};
+es.onerror = () => {};   // the browser reconnects by itself; the next snapshot or meter sets the chip
+
+$("#connectBtn").onclick = () => cmd(link === "idle" ? "connect" : "disconnect");
+document.querySelectorAll(".card[data-test]").forEach((card) => {
+  const test = card.dataset.test;
+  card.querySelector(".ask").onclick = () => { listeningFor = test; cmd("ask"); };
+  card.querySelector(".reset").onclick = () => cmd("reset");
+});
+setLink("idle");
+</script>
+</body>
+</html>
