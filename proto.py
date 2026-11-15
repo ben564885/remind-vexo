@@ -43,6 +43,9 @@ TAP_THRESHOLD_G = float(os.environ.get("TAP_G", "0.65"))   # default 0.8 missed 
 PILL_MIN_TURN = 30.0  # degrees one way: a real cap twist
 STILL_DPS = 150.0   # a real 'ask' double-tap happens with a still wrist
 KEY_RETURN_SECONDS = 4.0
+SHAKE_WINDOW = 2.0    # a pill shake: many fast back-and-forth wrist turns in this many seconds
+SHAKE_REVERSALS = 4   # direction changes on AXIS (each above SHAKE_DPS) that make a shake
+SHAKE_DPS = 90.0
 KEY_TURN_DEG = 65.0   # a key turn and its turn back are each at least this big   # an opposite turn this soon after a lock turn = key coming back out
 
 
@@ -185,6 +188,7 @@ class Watcher:
         self.ask_at = None          # set by a double-tap: listen for a question
         self.led_request = None     # answer colour waiting to be shown
         self.last_ask_tap = 0.0
+        self.shakes = []            # times of detected pill shakes
         self.twists = []            # (time, angle) of every twist trigger, for the key turn-and-back pattern
 
     def on_tap(self, e):
@@ -276,7 +280,9 @@ class Watcher:
         """Called from the main loop: look for a twist, then process clips that are due."""
         now = time.time()
         pts = [p for p in list(self.motion) if p[0] >= max(now - WINDOW, self.last_twist)]
-        if len(pts) > 5 and now - self.last_twist > COOLDOWN:
+        if self.detect_shake(now):
+            return
+        if len(pts) > 5 and now - self.last_twist > COOLDOWN and not self.near_shake(now, 2.5):
             # One-way sums: re-grips go the other way and must not cancel the real turns.
             pos = neg = 0.0
             for i in range(1, len(pts)):
@@ -314,6 +320,52 @@ class Watcher:
                     continue
                 threading.Thread(target=self.label, args=(t, angle, path, onset), daemon=True).start()
 
+    def detect_shake(self, now):
+        """A pill shake = the wrist turns fast back and forth several times. A key turn goes once, then back once."""
+        if self.shakes and now - self.shakes[-1] < 4.0:
+            return False
+        pts = [p for p in list(self.motion) if p[0] >= now - SHAKE_WINDOW]
+        sign, flips = 0, 0
+        for _, r, _o in pts:
+            if abs(r) >= SHAKE_DPS:
+                s_ = 1 if r > 0 else -1
+                if sign and s_ != sign:
+                    flips += 1
+                sign = s_
+        if flips < SHAKE_REVERSALS:
+            return False
+        self.shakes.append(now)
+        self.last_twist = now
+        self.twists = [tw for tw in self.twists if now - tw[0] > SHAKE_WINDOW + 1.0]   # those turns were the shake
+        emit("trigger", f"SHAKE ({flips} direction changes in {SHAKE_WINDOW:.0f} s)", by="shake", angle=0)
+        threading.Thread(target=self.label_shake, args=(now,), daemon=True).start()
+        return True
+
+    def near_shake(self, t, within=4.0):
+        return any(abs(t - ts) <= within for ts in self.shakes)
+
+    def label_shake(self, t):
+        """Shake = the pill cue. In a quiet room any real sound with the shake counts; Gemini says what it heard."""
+        time.sleep(max(0.0, t + 1.5 - time.time()))           # let the rattle go on a little
+        if abs(t - self.last_ask_tap) < CLIP_BEFORE + 1.0:
+            return
+        pcm = b"".join(p for ts, p in list(self.audio) if t - CLIP_BEFORE <= ts <= t + 1.5)
+        path = self.clips / f"shake-{int(t)}.wav"
+        write_wav(path, pcm)
+        onset = sound_onset_db(pcm)
+        start = time.time()
+        heard, action, conf = f"shake (onset {onset:.0f} dB)", "pills", 1.0
+        try:
+            out = gemini_label(path)
+            action, conf, heard = out["action"], float(out["confidence"]), "shake: " + out["heard"]
+        except Exception as ex:  # noqa: BLE001
+            emit("diag", f"  Gemini failed on the shake ({ex}); the motion alone decides")
+        label = "pills" if (onset >= MIN_ONSET_TWIST_DB or action == "pills") else "ignored"
+        if label == "ignored":
+            heard = f"shake with no sound (onset {onset:.0f} dB)"
+        self.memory.add(dict(time=t, angle=0.0, label=label, action=action, confidence=conf,
+                             heard=heard, latency=time.time() - start))
+
     def twist_between(self, t0, t1):
         """Largest one-way turn on AXIS between t0 and t1 (re-grips do not cancel)."""
         pts = [p for p in list(self.motion) if t0 <= p[0] <= t1]
@@ -329,7 +381,7 @@ class Watcher:
     def key_pattern(self, t, angle):
         """Key in a lock = one big turn, then a big turn back within a few seconds to pull the key out.
         Returns 'turn' (this is the lock action), 'back' (this is the return), or None."""
-        if abs(angle) < KEY_TURN_DEG:
+        if abs(angle) < KEY_TURN_DEG or self.near_shake(t):
             return None
         for ts, a in self.twists:
             if a * angle < 0 and abs(a) >= KEY_TURN_DEG:
@@ -344,6 +396,9 @@ class Watcher:
 
     def label(self, t, angle, path, onset=99.0):
         start = time.time()
+        time.sleep(max(0.0, t + 1.0 - time.time()))          # a shake is seen within about a second
+        if self.near_shake(t):
+            return                                             # this turn was part of a pill shake
         if abs(angle) >= KEY_TURN_DEG:                      # wait to see if a turn back follows
             time.sleep(max(0.0, t + KEY_RETURN_SECONDS + 0.3 - time.time()))
             pattern = self.key_pattern(t, angle)
