@@ -102,6 +102,17 @@ def speak(text):
         os.system(f"say {json.dumps(text)} &")
 
 
+def gemini_call(req, tries=3):
+    """Gemini sometimes answers 503 (overloaded) or 429 for a moment: try again."""
+    for k in range(tries):
+        try:
+            return json.load(urllib.request.urlopen(req, timeout=30))
+        except urllib.error.HTTPError as ex:
+            if ex.code not in (429, 500, 503) or k == tries - 1:
+                raise
+            time.sleep(0.8 * (k + 1))
+
+
 def gemini_label(wav_path):
     body = {"contents": [{"parts": [
         {"inline_data": {"mime_type": "audio/wav", "data": base64.b64encode(Path(wav_path).read_bytes()).decode()}},
@@ -114,7 +125,7 @@ def gemini_label(wav_path):
         f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
         data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
-    r = json.load(urllib.request.urlopen(req, timeout=30))
+    r = gemini_call(req)
     return json.loads(r["candidates"][0]["content"]["parts"][0]["text"])
 
 
@@ -129,7 +140,7 @@ def gemini_text(wav_path):
         f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
         data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
-    r = json.load(urllib.request.urlopen(req, timeout=30))
+    r = gemini_call(req)
     return json.loads(r["candidates"][0]["content"]["parts"][0]["text"]).get("words", "").strip()
 
 

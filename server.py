@@ -81,6 +81,12 @@ def band_thread(args):
             proto.emit("diag", f"  (event settings failed: {ex})")
         band.on("event", lambda e: proto.emit("diag", f"  (band event: {e.kind} {getattr(e, 'arg', '')})"))
         hub.status(link="connected")
+        try:
+            b = band.get_battery()
+            proto.emit("error", f"Battery: {b.percent}% ({b.state})")
+            print(f"BATTERY {b}")
+        except Exception as ex:  # noqa: BLE001
+            print(f"BATTERY read failed: {ex}")
         last_meter = 0.0
         running = True
         while running and not lost.is_set():
