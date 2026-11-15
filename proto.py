@@ -44,7 +44,7 @@ PILL_MIN_TURN = 30.0  # degrees one way: a real cap twist
 STILL_DPS = 150.0   # a real 'ask' double-tap happens with a still wrist
 KEY_RETURN_SECONDS = 4.0
 SHAKE_WINDOW = 2.0    # a pill shake: many fast back-and-forth wrist turns in this many seconds
-SHAKE_REVERSALS = 4   # direction changes on AXIS (each above SHAKE_DPS) that make a shake
+SHAKE_REVERSALS = 6   # direction changes on AXIS (each above SHAKE_DPS) that make a shake
 SHAKE_DPS = 90.0
 KEY_TURN_DEG = 65.0   # a key turn and its turn back are each at least this big   # an opposite turn this soon after a lock turn = key coming back out
 
@@ -354,15 +354,17 @@ class Watcher:
         write_wav(path, pcm)
         onset = sound_onset_db(pcm)
         start = time.time()
-        heard, action, conf = f"shake (onset {onset:.0f} dB)", "pills", 1.0
+        heard, action, conf = f"shake (onset {onset:.0f} dB)", "none", 0.0
         try:
             out = gemini_label(path)
             action, conf, heard = out["action"], float(out["confidence"]), "shake: " + out["heard"]
+            ok = action == "pills" and conf >= 0.4             # Gemini must hear a rattle, a lower bar than 0.6
         except Exception as ex:  # noqa: BLE001
-            emit("diag", f"  Gemini failed on the shake ({ex}); the motion alone decides")
-        label = "pills" if (onset >= MIN_ONSET_TWIST_DB or action == "pills") else "ignored"
-        if label == "ignored":
-            heard = f"shake with no sound (onset {onset:.0f} dB)"
+            emit("diag", f"  Gemini failed on the shake ({ex}); a loud rattle decides")
+            ok = onset >= MIN_ONSET_DB
+        label = "pills" if ok else "ignored"
+        if not ok:
+            heard = "shake but no pill rattle: " + heard
         self.memory.add(dict(time=t, angle=0.0, label=label, action=action, confidence=conf,
                              heard=heard, latency=time.time() - start))
 
