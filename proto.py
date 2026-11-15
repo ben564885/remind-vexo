@@ -115,6 +115,21 @@ def gemini_label(wav_path):
     return json.loads(r["candidates"][0]["content"]["parts"][0]["text"])
 
 
+def gemini_text(wav_path):
+    """Fallback speech to text with Gemini, used when Deepgram fails."""
+    body = {"contents": [{"parts": [
+        {"inline_data": {"mime_type": "audio/wav", "data": base64.b64encode(Path(wav_path).read_bytes()).decode()}},
+        {"text": "What does the person say in this audio? Give the exact words. Empty string if nobody speaks."}]}],
+        "generationConfig": {"responseMimeType": "application/json", "responseSchema": {"type": "OBJECT",
+            "properties": {"words": {"type": "STRING"}}, "required": ["words"]}}}
+    req = urllib.request.Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", "x-goog-api-key": os.environ["GEMINI_API_KEY"]})
+    r = json.load(urllib.request.urlopen(req, timeout=30))
+    return json.loads(r["candidates"][0]["content"]["parts"][0]["text"]).get("words", "").strip()
+
+
 class Memory:
     """Rules own the facts. The LLM only labels sounds."""
     def __init__(self):
@@ -200,8 +215,12 @@ class Watcher:
         try:
             question = deepgram_text(path)
         except Exception as ex:  # noqa: BLE001
-            emit("error", f"  Deepgram failed: {ex}")
-            return
+            emit("diag", f"  Deepgram failed ({ex}), using Gemini for the question")
+            try:
+                question = gemini_text(path)
+            except Exception as ex2:  # noqa: BLE001
+                emit("error", f"  Speech to text failed: {ex2}")
+                return
         if not question.strip():
             emit("answer", "ASK (nothing heard) -> ignored", question="", reply="", verdict="none")
             return
