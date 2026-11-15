@@ -44,7 +44,7 @@ PILL_MIN_TURN = 30.0  # degrees one way: a real cap twist
 STILL_DPS = 150.0   # a real 'ask' double-tap happens with a still wrist
 KEY_RETURN_SECONDS = 4.0
 SHAKE_WINDOW = 2.0    # a pill shake: many fast back-and-forth wrist turns in this many seconds
-SHAKE_REVERSALS = 6   # direction changes on AXIS (each above SHAKE_DPS) that make a shake
+SHAKE_REVERSALS = 4   # direction changes on AXIS (each above SHAKE_DPS) that make a shake
 SHAKE_DPS = 90.0
 KEY_TURN_DEG = 65.0   # a key turn and its turn back are each at least this big   # an opposite turn this soon after a lock turn = key coming back out
 
@@ -349,7 +349,7 @@ class Watcher:
         time.sleep(max(0.0, t + 1.5 - time.time()))           # let the rattle go on a little
         if abs(t - self.last_ask_tap) < CLIP_BEFORE + 1.0:
             return
-        pcm = b"".join(p for ts, p in list(self.audio) if t - CLIP_BEFORE <= ts <= t + 1.5)
+        pcm = b"".join(p for ts, p in list(self.audio) if t - 2.5 <= ts <= t + 1.5)   # just the shake
         path = self.clips / f"shake-{int(t)}.wav"
         write_wav(path, pcm)
         onset = sound_onset_db(pcm)
