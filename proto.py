@@ -46,6 +46,8 @@ KEY_RETURN_SECONDS = 4.0
 SHAKE_WINDOW = 2.0    # a pill shake: many fast back-and-forth wrist turns in this many seconds
 SHAKE_REVERSALS = 4   # direction changes on AXIS (each above SHAKE_DPS) that make a shake
 SHAKE_DPS = 90.0
+LOCK_MIN_CONF = 0.6   # Gemini hears the keys jingling at least this sure
+LOCK_MIN_TURN = 45.0  # ...and the wrist turns at least this much around it
 KEY_TURN_DEG = 65.0   # a key turn and its turn back are each at least this big   # an opposite turn this soon after a lock turn = key coming back out
 
 
@@ -374,7 +376,10 @@ class Watcher:
             emit("diag", f"  Gemini failed on the shake ({ex}); a loud rattle decides")
             ok = onset >= MIN_ONSET_DB
         label = "pills" if ok else "ignored"
-        if not ok:
+        if not ok and action == "lock" and conf >= LOCK_MIN_CONF:
+            label = "locked"       # the key turn jiggled like a shake, and Gemini heard the keys
+            heard = "keys + wrist motion: " + heard
+        elif not ok:
             heard = "shake but no pill rattle: " + heard
         self.memory.add(dict(time=t, angle=0.0, label=label, action=action, confidence=conf,
                              heard=heard, latency=time.time() - start))
@@ -438,8 +443,13 @@ class Watcher:
         prev = [e for e in self.memory.log if e["label"] in ("locked", "unlocked")]
         is_return = bool(prev) and t - prev[-1]["time"] < KEY_RETURN_SECONDS and prev[-1]["angle"] * angle < 0
         if action == "lock":
-            label = "ignored"      # the lock is decided by the key turn-and-back motion, not by sound alone
-            out["heard"] = "lock sound without a key turn-and-back: " + out["heard"]
+            turn = self.twist_between(t - CLIP_BEFORE - 1.0, time.time())
+            if conf >= LOCK_MIN_CONF and max(abs(turn), abs(angle)) >= LOCK_MIN_TURN:
+                label = "locked"   # keys jingling AND a wrist turn (demo: every key turn is a lock)
+                out["heard"] = f"keys + wrist turn ({turn:+.0f} deg): " + out["heard"]
+            else:
+                label = "ignored"
+                out["heard"] = f"lock sound but no wrist turn ({turn:+.0f} deg): " + out["heard"]
         elif action == "pills" and conf >= 0.6 and self.near_key_pattern(t):
             label = "ignored"      # keys rattling in the cup during a key turn are not pills
             out["heard"] = "rattle during a key turn: " + out["heard"]
