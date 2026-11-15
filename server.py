@@ -70,7 +70,9 @@ def band_thread(args):
         band.on("audio", w.on_audio)
         band.on("tap", w.on_tap)
         band.on("double-tap", lambda e: (proto.emit("tap", "  (double-tap event)"), w.on_double_tap(e)))
-        band.on("disconnect", lambda e: hub.status(link="idle"))
+        lost = threading.Event()
+        band.on("disconnect", lambda e: (lost.set(), hub.status(link="idle"),
+                                         hub.push("error", {"text": "The band disconnected. Click Connect band, then double-tap the band."})))
         band.configure(motion=50, audio=True, events=True)
         band.set_events(tap_threshold=proto.TAP_THRESHOLD_G)
         try:
@@ -81,7 +83,7 @@ def band_thread(args):
         hub.status(link="connected")
         last_meter = 0.0
         running = True
-        while running:
+        while running and not lost.is_set():
             band.wait(0.05)
             w.check()
             w.check_question()
@@ -101,8 +103,10 @@ def band_thread(args):
             elif cmd == "reset":
                 memory.log.clear()
                 hub.push("reset", {})
-            elif cmd == "disconnect":
+            elif cmd in ("disconnect", "connect"):
                 running = False
+                if cmd == "connect":
+                    commands.put("connect")
         try:
             band.disconnect()
         except Exception:  # noqa: BLE001

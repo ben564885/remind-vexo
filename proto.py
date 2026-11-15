@@ -71,9 +71,13 @@ PROMPT = ("Audio from a microphone on a person's wrist, 16 kHz, cut around a mom
           "swallowing. none = anything else (speech, room noise, other sounds). Judge ONLY the physical sounds: ignore what people say, even if they talk about locks or pills.")
 
 
+# "take"/"took": Deepgram sometimes mishears "pills" ("did I take my test today?").
+PILL_WORDS = ("pill", "med", "vitamin", "tablet", "advil", "take", "took", "taken")
+
+
 def deepgram_text(wav_path):
     req = urllib.request.Request(
-        "https://api.deepgram.com/v1/listen?smart_format=true&model=nova-3",
+        "https://api.deepgram.com/v1/listen?smart_format=true&model=nova-3&keyterm=pills&keyterm=lock&keyterm=door&keyterm=medicine",
         data=Path(wav_path).read_bytes(),
         headers={"Authorization": "Token " + os.environ["DEEPGRAM_API_KEY"], "Content-Type": "audio/wav"})
     r = json.load(urllib.request.urlopen(req, timeout=30))
@@ -131,14 +135,14 @@ class Memory:
         if not took:
             return "No. I have not seen you take your pills today."
         when = datetime.datetime.fromtimestamp(took[-1]["time"]).strftime("%-I:%M %p")
-        return f"Yes. You took your pills at {when}. I heard the bottle and felt the cap twist."
+        return f"Yes. You took your pills at {when}."
 
     def answer(self, question):
         """Rules route the question. No LLM decides the answer."""
         q = question.lower()
         if any(w in q for w in ("lock", "door", "key")):
             return self.door_answer()
-        if any(w in q for w in ("pill", "med", "vitamin", "tablet", "advil")):
+        if any(w in q for w in PILL_WORDS):
             return self.pills_answer()
         return "I can tell you about your pills or your door. Try: did I take my pills?"
 
@@ -150,7 +154,7 @@ class Memory:
         last = locks[-1]
         when = datetime.datetime.fromtimestamp(last["time"]).strftime("%-I:%M %p")
         if last["label"] == "locked":
-            return f"Yes. You locked the door at {when}. I heard the lock and felt your wrist turn."
+            return f"Yes. You locked the door at {when}."
         return f"No. The last thing I saw was you unlocking the door at {when}."
 
 
@@ -201,7 +205,7 @@ class Watcher:
         if not question.strip():
             emit("answer", "ASK (nothing heard) -> ignored", question="", reply="", verdict="none")
             return
-        if not any(w in question.lower() for w in ("pill", "med", "vitamin", "tablet", "advil", "lock", "door", "key")):
+        if not any(w in question.lower() for w in PILL_WORDS + ("lock", "door", "key")):
             emit("answer", f'ASK "{question}" -> not a question for me, ignored', question=question, reply="", verdict="none")
             return
         reply = self.memory.answer(question)
